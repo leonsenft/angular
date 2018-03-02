@@ -44,7 +44,7 @@ case $TASK in
   build:release)
     echo -e '\033[1mTASK: Building Only [build:release]\033[22m'
     echo -e 'pub run build_runner build --config=release --fail-on-severe'
-    pub run build_runner build --config=release --fail-on-severe
+    pub run build_runner build --config=release --fail-on-severe -o build
     ;;
 
   test)
