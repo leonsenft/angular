@@ -36,7 +36,7 @@ jobs:
       env: PKG="examples/hacker_news_pwa"
 
     - stage: building
-      script: ./tool/travis.sh build
+      script: ./tool/travis.sh build:release
       env: PKG="examples/hacker_news_pwa"
       cache:
         directories:
@@ -44,7 +44,7 @@ jobs:
 
 
 # Create a merged output build/.
-#before_deploy:
+before_deploy:
   - pushd examples/hacker_news_pwa
   - pub run build_runner build -o build --fail-on-severe --config release
   - popd
