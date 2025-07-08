@@ -7,7 +7,15 @@
  */
 import {state, style, trigger} from '@angular/animations';
 import {CommonModule} from '@angular/common';
-import {Component, Directive, EventEmitter, Input, Output, ViewContainerRef} from '../../src/core';
+import {
+  Component,
+  Directive,
+  EventEmitter,
+  input,
+  Input,
+  Output,
+  ViewContainerRef,
+} from '../../src/core';
 import {TestBed} from '../../testing';
 import {By, DomSanitizer, SafeUrl} from '@angular/platform-browser';
 import {NoopAnimationsModule} from '@angular/platform-browser/animations';
@@ -126,6 +134,118 @@ describe('property bindings', () => {
       fixture.detectChanges();
       expect(myCompNode.nativeElement.getAttribute('for')).toBeFalsy();
       expect(myCompNode.componentInstance.for).toBe('hej');
+    },
+  );
+
+  it('should bind ARIA properties to their corresponding attributes', () => {
+    @Component({
+      template: '<button [ariaLabel]="label"></button>',
+    })
+    class MyComp {
+      label?: string;
+    }
+
+    const fixture = TestBed.createComponent(MyComp);
+    const button = fixture.debugElement.query(By.css('button')).nativeElement;
+
+    fixture.componentInstance.label = 'Open';
+    fixture.detectChanges();
+
+    expect(button.getAttribute('aria-label')).toBe('Open');
+
+    fixture.componentInstance.label = 'Close';
+    fixture.detectChanges();
+
+    expect(button.getAttribute('aria-label')).toBe('Close');
+  });
+
+  describe('should bind to ARIA attribute names', () => {
+    it('on HTML elements', () => {
+      @Component({
+        template: '<button [aria-label]="label"></button>',
+      })
+      class MyComp {
+        label?: string;
+      }
+
+      const fixture = TestBed.createComponent(MyComp);
+      const button = fixture.debugElement.query(By.css('button')).nativeElement;
+
+      fixture.componentInstance.label = 'Open';
+      fixture.detectChanges();
+
+      expect(button.getAttribute('aria-label')).toBe('Open');
+
+      fixture.componentInstance.label = 'Close';
+      fixture.detectChanges();
+
+      expect(button.getAttribute('aria-label')).toBe('Close');
+    });
+
+    it('on component elements', () => {
+      @Component({
+        selector: 'button[fancy]',
+      })
+      class FancyButton {}
+
+      @Component({
+        template: '<button fancy [aria-label]="label"></button>',
+        imports: [FancyButton],
+      })
+      class MyComp {
+        label?: string;
+      }
+
+      TestBed.configureTestingModule({errorOnUnknownProperties: true});
+      const fixture = TestBed.createComponent(MyComp);
+      const button = fixture.debugElement.query(By.css('button')).nativeElement;
+
+      fixture.componentInstance.label = 'Open';
+      fixture.detectChanges();
+
+      expect(button.getAttribute('aria-label')).toBe('Open');
+
+      fixture.componentInstance.label = 'Close';
+      fixture.detectChanges();
+
+      expect(button.getAttribute('aria-label')).toBe('Close');
+    });
+  });
+
+  it(
+    'should not bind to ARIA properties by their corresponding attribute names, if they ' +
+      'correspond to inputs',
+    () => {
+      @Component({
+        template: '',
+        selector: 'my-comp',
+      })
+      class MyComp {
+        @Input({alias: 'aria-label'}) myAriaLabel?: string;
+      }
+
+      @Component({
+        template: '<my-comp [aria-label]="label"></my-comp>',
+        imports: [MyComp],
+      })
+      class App {
+        label = 'a';
+      }
+
+      const fixture = TestBed.createComponent(App);
+      const myCompNode = fixture.debugElement.query(By.directive(MyComp));
+
+      fixture.componentInstance.label = 'a';
+      fixture.detectChanges();
+
+      expect(myCompNode.nativeElement.getAttribute('aria-label')).toBeFalsy();
+      expect(myCompNode.componentInstance.myAriaLabel).toBe('a');
+
+      fixture.componentInstance.label = 'b';
+      fixture.detectChanges();
+
+      expect(myCompNode.nativeElement.getAttribute('aria-label')).toBeFalsy();
+      expect(myCompNode.componentInstance.myAriaLabel).toBe('b');
     },
   );
 

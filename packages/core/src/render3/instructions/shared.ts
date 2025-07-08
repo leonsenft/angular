@@ -236,7 +236,7 @@ export function enableApplyRootElementTransformImpl() {
  *
  * Note: this mapping has to be kept in sync with the equivalent mappings in the compiler.
  */
-function mapPropName(name: string): string {
+function defaultMapPropName(name: string): string {
   if (name === 'class') return 'className';
   if (name === 'for') return 'htmlFor';
   if (name === 'formaction') return 'formAction';
@@ -253,6 +253,7 @@ export function setPropertyAndInputs<T>(
   value: T,
   renderer: Renderer,
   sanitizer: SanitizerFn | null | undefined,
+  mapPropName: (name: string) => string = defaultMapPropName,
 ): void {
   ngDevMode && assertNotSame(value, NO_CHANGE as any, 'Incoming value should never be NO_CHANGE.');
   const tView = lView[TVIEW];
@@ -270,6 +271,39 @@ export function setPropertyAndInputs<T>(
   }
 
   setDomProperty(tNode, lView, propName, value, renderer, sanitizer);
+}
+
+/**
+ * Converts an ARIA property name to its corresponding attribute name.
+ *
+ * https://www.w3.org/TR/wai-aria-1.2/#accessibilityroleandproperties-correspondence
+ */
+function ariaAttrName(name: string): string {
+  // Convert an ARIA property name to its corresponding attribute name, if necessary.
+  return name.charAt(4) !== '-' ? `aria-${name.slice(4).toLowerCase()}` : name;
+}
+
+export function setAriaAttributeAndInputs<T>(
+  tNode: TNode,
+  lView: LView,
+  name: string,
+  value: T,
+  renderer: Renderer,
+): void {
+  ngDevMode && assertNotSame(value, NO_CHANGE as any, 'Incoming value should never be NO_CHANGE.');
+  const tView = lView[TVIEW];
+  const hasSetInput = setAllInputsForProperty(tNode, tView, lView, name, value);
+
+  if (hasSetInput) {
+    isComponentHost(tNode) && markDirtyIfOnPush(lView, tNode.index);
+    ngDevMode && setNgReflectProperties(lView, tView, tNode, name, value);
+    return; // Stop propcessing if we've matched at least one input.
+  }
+
+  ngDevMode && assertTNodeType(tNode, TNodeType.Element);
+  const element = getNativeByTNode(tNode, lView) as RElement;
+  const attributeName = ariaAttrName(name);
+  setElementAttribute(renderer, element, null, tNode.value, attributeName, value, null);
 }
 
 /**

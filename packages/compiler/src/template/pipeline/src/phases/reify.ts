@@ -17,6 +17,8 @@ import {
 } from '../compilation';
 import * as ng from '../instruction';
 
+const ARIA_PREFIX = 'aria';
+
 /**
  * Map of target resolvers for event listeners.
  */
@@ -562,13 +564,8 @@ function reifyUpdateOperations(unit: CompilationUnit, ops: ir.OpList<ir.UpdateOp
         ir.OpList.replace(
           op,
           unit.job.mode === TemplateCompilationMode.DomOnly && !op.isLegacyAnimationTrigger
-            ? ng.domProperty(
-                DOM_PROPERTY_REMAPPING.get(op.name) ?? op.name,
-                op.expression,
-                op.sanitizer,
-                op.sourceSpan,
-              )
-            : ng.property(op.name, op.expression, op.sanitizer, op.sourceSpan),
+            ? reifyDomProperty(op)
+            : reifyProperty(op),
         );
         break;
       case ir.OpKind.TwoWayProperty:
@@ -614,15 +611,7 @@ function reifyUpdateOperations(unit: CompilationUnit, ops: ir.OpList<ir.UpdateOp
           if (op.isLegacyAnimationTrigger) {
             ir.OpList.replace(op, ng.syntheticHostProperty(op.name, op.expression, op.sourceSpan));
           } else {
-            ir.OpList.replace(
-              op,
-              ng.domProperty(
-                DOM_PROPERTY_REMAPPING.get(op.name) ?? op.name,
-                op.expression,
-                op.sanitizer,
-                op.sourceSpan,
-              ),
-            );
+            ir.OpList.replace(op, reifyDomProperty(op));
           }
         }
         break;
@@ -660,6 +649,28 @@ function reifyUpdateOperations(unit: CompilationUnit, ops: ir.OpList<ir.UpdateOp
         );
     }
   }
+}
+
+function ariaAttrName(name: string): string {
+  // Convert an ARIA property name to its corresponding attribute name, if necessary.
+  return name.charAt(4) !== '-' ? `${ARIA_PREFIX}-${name.slice(4).toLowerCase()}` : name;
+}
+
+function reifyDomProperty(op: ir.DomPropertyOp | ir.PropertyOp): ir.UpdateOp {
+  return op.name.startsWith(ARIA_PREFIX)
+    ? ng.attribute(ariaAttrName(op.name), op.expression, null, null, op.sourceSpan)
+    : ng.domProperty(
+        DOM_PROPERTY_REMAPPING.get(op.name) ?? op.name,
+        op.expression,
+        op.sanitizer,
+        op.sourceSpan,
+      );
+}
+
+function reifyProperty(op: ir.PropertyOp): ir.UpdateOp {
+  return op.name.startsWith(ARIA_PREFIX)
+    ? ng.ariaProperty(op.name, op.expression, op.sourceSpan)
+    : ng.property(op.name, op.expression, op.sanitizer, op.sourceSpan);
 }
 
 function reifyIrExpression(expr: o.Expression): o.Expression {
