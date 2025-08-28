@@ -7,7 +7,7 @@
  */
 
 import {computed, Signal, untracked, WritableSignal} from '@angular/core';
-import {Field, FieldContext, FieldPath, FieldState} from '../api/types';
+import {Field, FieldContext, FieldPath, FieldState, PathKind} from '../api/types';
 import {FieldPathNode} from '../schema/path_node';
 import {isArray} from '../util/type_guards';
 import type {FieldNode} from './node';
@@ -16,7 +16,7 @@ import {getBoundPathDepth} from './resolution';
 /**
  * `FieldContext` implementation, backed by a `FieldNode`.
  */
-export class FieldNodeContext implements FieldContext<unknown> {
+export class FieldNodeContext<TValue> implements FieldContext<TValue> {
   /**
    * Cache of paths that have been resolved for this context.
    *
@@ -29,7 +29,7 @@ export class FieldNodeContext implements FieldContext<unknown> {
 
   constructor(
     /** The field node this context corresponds to. */
-    private readonly node: FieldNode,
+    private readonly node: FieldNode<TValue>,
   ) {}
 
   /**
@@ -48,7 +48,7 @@ export class FieldNodeContext implements FieldContext<unknown> {
         // We always make sure to walk up at least as far as the depth of the path we were bound to.
         // This ensures that we do not accidentally match on the wrong application of a recursively
         // applied schema.
-        let field: FieldNode | undefined = this.node;
+        let field: FieldNode<unknown> | undefined = this.node as FieldNode<unknown>;
         let stepsRemaining = getBoundPathDepth();
         while (stepsRemaining > 0 || !field.structure.logic.hasLogic(targetPathNode.root.logic)) {
           stepsRemaining--;
@@ -80,15 +80,15 @@ export class FieldNodeContext implements FieldContext<unknown> {
     return this.cache.get(target)!() as Field<U>;
   }
 
-  get field(): Field<unknown> {
+  get field(): Field<TValue> {
     return this.node.fieldProxy;
   }
 
-  get state(): FieldState<unknown> {
+  get state(): FieldState<TValue> {
     return this.node;
   }
 
-  get value(): WritableSignal<unknown> {
+  get value(): WritableSignal<TValue> {
     return this.node.structure.value;
   }
 

@@ -8,20 +8,21 @@
 
 import {computed, runInInjectionContext, Signal, untracked} from '@angular/core';
 import {AggregateProperty, Property} from '../api/property';
+import {PathKind} from '../api/types';
 import type {FieldNode} from './node';
 import {cast} from './util';
 
 /**
  * Tracks custom properties associated with a `FieldNode`.
  */
-export class FieldPropertyState {
+export class FieldPropertyState<TValue, TPathKind extends PathKind = PathKind.Root> {
   /** A map of all `Property` and `AggregateProperty` that have been defined for this field. */
   private readonly properties = new Map<
     Property<unknown> | AggregateProperty<unknown, unknown>,
     unknown
   >();
 
-  constructor(private readonly node: FieldNode) {
+  constructor(private readonly node: FieldNode<TValue, TPathKind>) {
     // Field nodes (and thus their property state) are created in a linkedSignal in order to mirror
     // the structure of the model data. We need to run the property factories untracked so that they
     // do not cause recomputation of the linkedSignal.

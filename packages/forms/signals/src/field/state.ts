@@ -66,7 +66,7 @@ export class FieldNodeState {
   /** The UI controls the field is currently bound to. */
   readonly controls = signal<readonly Control<unknown>[]>([]);
 
-  constructor(private readonly node: FieldNode) {}
+  constructor(private readonly node: FieldNode<unknown>) {}
 
   /**
    * Whether this field is considered dirty.

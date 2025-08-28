@@ -14,7 +14,7 @@ import {FieldPathNode} from './path_node';
  * used to detect erroneous references to a path node outside of the context of its schema function.
  * Do not set this directly, it is a context variable managed by `SchemaImpl.compile`.
  */
-let currentCompilingNode: FieldPathNode | undefined = undefined;
+let currentCompilingNode: FieldPathNode<unknown> | undefined = undefined;
 
 /**
  * A cache of all schemas compiled under the current root compilation. This is used to avoid doing
@@ -34,28 +34,29 @@ let currentCompilingNode: FieldPathNode | undefined = undefined;
  * Do not directly add or remove entries from this map, it is a context variable managed by
  * `SchemaImpl.compile` and `SchemaImpl.rootCompile`.
  */
-const compiledSchemas = new Map<SchemaImpl, FieldPathNode>();
+const compiledSchemas = new Map<SchemaImpl<unknown>, FieldPathNode<unknown>>();
 
 /**
  * Implements the `Schema` concept.
  */
-export class SchemaImpl {
-  constructor(private schemaFn: SchemaFn<unknown>) {}
+export class SchemaImpl<TValue> {
+  constructor(private schemaFn: SchemaFn<TValue>) {}
 
   /**
    * Compiles this schema within the current root compilation context. If the schema was previously
    * compiled within this context, we reuse the cached FieldPathNode, otherwise we create a new one
    * and cache it in the compilation context.
    */
-  compile(): FieldPathNode {
-    if (compiledSchemas.has(this)) {
-      return compiledSchemas.get(this)!;
+  compile(): FieldPathNode<TValue> {
+    const key = this as SchemaImpl<unknown>;
+    if (compiledSchemas.has(key)) {
+      return compiledSchemas.get(key) as FieldPathNode<TValue>;
     }
-    const path = FieldPathNode.newRoot();
-    compiledSchemas.set(this, path);
+    const path = FieldPathNode.newRoot<TValue>();
+    compiledSchemas.set(key, path as FieldPathNode<unknown>);
     let prevCompilingNode = currentCompilingNode;
     try {
-      currentCompilingNode = path;
+      currentCompilingNode = path as FieldPathNode<unknown>;
       this.schemaFn(path.fieldPathProxy);
     } finally {
       // Use a try/finally to ensure we restore the previous root upon completion,
@@ -68,18 +69,20 @@ export class SchemaImpl {
   /**
    * Creates a SchemaImpl from the given SchemaOrSchemaFn.
    */
-  static create(schema: SchemaImpl | SchemaOrSchemaFn<any>) {
+  static create<TValue>(schema: SchemaImpl<TValue> | SchemaOrSchemaFn<TValue>) {
     if (schema instanceof SchemaImpl) {
       return schema;
     }
-    return new SchemaImpl(schema as SchemaFn<unknown>);
+    return new SchemaImpl(schema as SchemaFn<TValue>);
   }
 
   /**
    * Compiles the given schema in a fresh compilation context. This clears the cached results of any
    * previous compilations.
    */
-  static rootCompile(schema: SchemaImpl | SchemaOrSchemaFn<any> | undefined): FieldPathNode {
+  static rootCompile<TValue>(
+    schema: SchemaImpl<TValue> | SchemaOrSchemaFn<TValue> | undefined,
+  ): FieldPathNode<TValue> {
     try {
       compiledSchemas.clear();
       if (schema === undefined) {
@@ -88,7 +91,7 @@ export class SchemaImpl {
       if (schema instanceof SchemaImpl) {
         return schema.compile();
       }
-      return new SchemaImpl(schema as SchemaFn<unknown>).compile();
+      return new SchemaImpl(schema as SchemaFn<TValue>).compile();
     } finally {
       // Use a try/finally to ensure we properly reset the compilation context upon completion,
       // even if there are errors while compiling the schema.

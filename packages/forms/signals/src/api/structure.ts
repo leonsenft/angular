@@ -11,6 +11,7 @@ import {inject, Injector, runInInjectionContext, WritableSignal} from '@angular/
 import {BasicFieldAdapter, FieldAdapter} from '../field/field_adapter';
 import {FormFieldManager} from '../field/manager';
 import {FieldNode} from '../field/node';
+import type {FieldNodeStructure} from '../field/structure';
 import {addDefaultField} from '../field/validation';
 import {FieldPathNode} from '../schema/path_node';
 import {assertPathIsCurrent, isSchemaOrSchemaFn, SchemaImpl} from '../schema/schema';
@@ -192,9 +193,9 @@ export function form<TValue>(...args: any[]): Field<TValue> {
   const fieldManager = new FormFieldManager(injector, options?.name);
   const adapter = options?.adapter ?? new BasicFieldAdapter();
   const fieldRoot = FieldNode.newRoot(fieldManager, model, pathNode, adapter);
-  fieldManager.createFieldManagementEffect(fieldRoot.structure);
+  fieldManager.createFieldManagementEffect(fieldRoot.structure as FieldNodeStructure<unknown>);
 
-  return fieldRoot.fieldProxy as Field<TValue>;
+  return fieldRoot.fieldProxy;
 }
 
 /**
@@ -363,7 +364,7 @@ export async function submit<TValue>(
   form: Field<TValue>,
   action: (form: Field<TValue>) => Promise<TreeValidationResult>,
 ) {
-  const node = form() as FieldNode;
+  const node = form() as FieldNode<unknown>;
   markAllAsTouched(node);
 
   // Fail fast if the form is already invalid.
@@ -387,16 +388,16 @@ export async function submit<TValue>(
  * @param errors The errors to set.
  */
 function setServerErrors(
-  submittedField: FieldNode,
+  submittedField: FieldNode<unknown>,
   errors: OneOrMany<WithOptionalField<ValidationError>>,
 ) {
   if (!isArray(errors)) {
     errors = [errors];
   }
-  const errorsByField = new Map<FieldNode, ValidationError[]>();
+  const errorsByField = new Map<FieldNode<unknown>, ValidationError[]>();
   for (const error of errors) {
     const errorWithField = addDefaultField(error, submittedField.fieldProxy);
-    const field = errorWithField.field() as FieldNode;
+    const field = errorWithField.field() as FieldNode<unknown>;
     let fieldErrors = errorsByField.get(field);
     if (!fieldErrors) {
       fieldErrors = [];
@@ -420,7 +421,7 @@ export function schema<TValue>(fn: SchemaFn<TValue>): Schema<TValue> {
 }
 
 /** Marks a {@link node} and its descendants as touched. */
-function markAllAsTouched(node: FieldNode) {
+function markAllAsTouched(node: FieldNode<unknown>) {
   node.markAsTouched();
   for (const child of node.structure.children()) {
     markAllAsTouched(child);

@@ -8,7 +8,7 @@
 
 import type {Signal, WritableSignal} from '@angular/core';
 import {AggregateProperty, Property} from '../api/property';
-import type {DisabledReason, Field, FieldContext, FieldState} from '../api/types';
+import type {DisabledReason, Field, FieldContext, FieldState, PathKind} from '../api/types';
 import type {ValidationError} from '../api/validation_errors';
 import type {Control} from '../controls/control';
 import {LogicNode} from '../schema/logic_node';
@@ -41,39 +41,44 @@ import type {FieldAdapter} from './field_adapter';
  * This class is largely a wrapper that aggregates several smaller pieces that each manage a subset of
  * the responsibilities.
  */
-export class FieldNode implements FieldState<unknown> {
-  readonly structure: FieldNodeStructure;
+export class FieldNode<TValue, TPathKind extends PathKind = PathKind.Root>
+  implements FieldState<TValue>
+{
+  readonly structure: FieldNodeStructure<TValue>;
   readonly validationState: ValidationState;
-  readonly propertyState: FieldPropertyState;
+  readonly propertyState: FieldPropertyState<TValue>;
   readonly nodeState: FieldNodeState;
   readonly submitState: FieldSubmitState;
 
-  private _context: FieldContext<unknown> | undefined = undefined;
+  private _context: FieldContext<TValue, TPathKind> | undefined = undefined;
   readonly fieldAdapter: FieldAdapter;
 
-  get context(): FieldContext<unknown> {
-    return (this._context ??= new FieldNodeContext(this));
+  get context(): FieldContext<TValue, TPathKind> {
+    return (this._context ??= new FieldNodeContext(this) as unknown as FieldContext<
+      TValue,
+      TPathKind
+    >);
   }
 
   /**
    * Proxy to this node which allows navigation of the form graph below it.
    */
-  readonly fieldProxy = new Proxy(() => this, FIELD_PROXY_HANDLER) as unknown as Field<any>;
+  readonly fieldProxy = new Proxy<Field<unknown>>(() => this, FIELD_PROXY_HANDLER) as Field<TValue>;
 
-  constructor(options: FieldNodeOptions) {
+  constructor(options: FieldNodeOptions<TValue>) {
     this.fieldAdapter = options.fieldAdapter;
     this.structure = this.fieldAdapter.createStructure(this, options);
-    this.validationState = this.fieldAdapter.createValidationState(this, options);
-    this.nodeState = this.fieldAdapter.createNodeState(this, options);
+    this.validationState = this.fieldAdapter.createValidationState(this as FieldNode<unknown>);
+    this.nodeState = this.fieldAdapter.createNodeState(this as FieldNode<unknown>);
     this.propertyState = new FieldPropertyState(this);
-    this.submitState = new FieldSubmitState(this);
+    this.submitState = new FieldSubmitState(this as FieldNode<unknown>);
   }
 
-  get logicNode(): LogicNode {
+  get logicNode(): LogicNode<TValue, TPathKind> {
     return this.structure.logic;
   }
 
-  get value(): WritableSignal<unknown> {
+  get value(): WritableSignal<TValue> {
     return this.structure.value;
   }
 
@@ -177,23 +182,25 @@ export class FieldNode implements FieldState<unknown> {
   /**
    * Creates a new root field node for a new form.
    */
-  static newRoot<T>(
+  static newRoot<TValue>(
     fieldManager: FormFieldManager,
-    value: WritableSignal<T>,
-    pathNode: FieldPathNode,
+    value: WritableSignal<TValue>,
+    pathNode: FieldPathNode<TValue>,
     adapter: FieldAdapter,
-  ): FieldNode {
+  ): FieldNode<TValue> {
     return adapter.newRoot(fieldManager, value, pathNode, adapter);
   }
 
   /**
    * Creates a child field node based on the given options.
    */
-  private static newChild(options: ChildFieldNodeOptions): FieldNode {
+  private static newChild<TValue>(
+    options: ChildFieldNodeOptions<TValue>,
+  ): FieldNode<TValue, PathKind.Child> {
     return options.fieldAdapter.newChild(options);
   }
 
-  createStructure(options: FieldNodeOptions) {
+  createStructure(options: FieldNodeOptions<TValue>) {
     return options.kind === 'root'
       ? new RootFieldNodeStructure(
           this,
@@ -221,7 +228,9 @@ export class FieldNode implements FieldState<unknown> {
  * Field node of a field that has children.
  * This simplifies and makes certain types cleaner.
  */
-export interface ParentFieldNode extends FieldNode {
+export interface ParentFieldNode extends FieldNode<unknown> {
   readonly value: WritableSignal<Record<string, unknown>>;
-  readonly structure: FieldNodeStructure & {value: WritableSignal<Record<string, unknown>>};
+  readonly structure: FieldNodeStructure<unknown> & {
+    value: WritableSignal<Record<string, unknown>>;
+  };
 }

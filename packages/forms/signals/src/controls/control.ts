@@ -163,8 +163,8 @@ export class Control<T> {
     // (as opposed to just passing the field through to its `control` input).
     effect(
       (onCleanup) => {
-        const fieldNode = this.state() as unknown as FieldNode;
-        fieldNode.nodeState.controls.update((controls) => [...controls, this as Control<unknown>]);
+        const fieldNode = this.state() as FieldNode<T>;
+        fieldNode.nodeState.controls.update((controls) => [...controls, this]);
         onCleanup(() => {
           fieldNode.nodeState.controls.update((controls) => controls.filter((c) => c !== this));
         });

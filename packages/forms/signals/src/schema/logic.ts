@@ -8,7 +8,14 @@
 
 import {untracked} from '@angular/core';
 import {AggregateProperty, Property} from '../api/property';
-import {DisabledReason, type FieldContext, type FieldPath, type LogicFn} from '../api/types';
+import {
+  DisabledReason,
+  type FieldContext,
+  type FieldPath,
+  type LogicFn,
+  type OneOrMany,
+  PathKind,
+} from '../api/types';
 import type {ValidationError} from '../api/validation_errors';
 import type {FieldNode} from '../field/node';
 import {isArray} from '../util/type_guards';
@@ -72,9 +79,14 @@ export interface BoundPredicate extends Predicate {
  * logic functions registered in the schema, and using them to derive the value for some associated
  * piece of field state.
  */
-export abstract class AbstractLogic<TReturn, TValue = TReturn> {
+export abstract class AbstractLogic<
+  TValue,
+  TReturn,
+  TResult,
+  TPathKind extends PathKind = PathKind.Root,
+> {
   /** The set of logic functions that contribute to the value of the associated state. */
-  protected readonly fns: Array<LogicFn<any, TValue | typeof IGNORED>> = [];
+  protected readonly fns: Array<LogicFn<TValue, TReturn | typeof IGNORED>> = [];
 
   constructor(
     /**
@@ -88,16 +100,16 @@ export abstract class AbstractLogic<TReturn, TValue = TReturn> {
    * Computes the value of the associated field state based on the logic functions and predicates
    * registered with this logic instance.
    */
-  abstract compute(arg: FieldContext<any>): TReturn;
+  abstract compute(arg: FieldContext<TValue, TPathKind>): TResult;
 
   /**
    * The default value that the associated field state should assume if there are no logic functions
    * registered by the schema (or if the logic is disabled by a predicate).
    */
-  abstract get defaultValue(): TReturn;
+  abstract get defaultValue(): TResult;
 
   /** Registers a logic function with this logic instance. */
-  push(logicFn: LogicFn<any, TValue>) {
+  push(logicFn: LogicFn<TValue, TReturn, TPathKind>) {
     this.fns.push(wrapWithPredicates(this.predicates, logicFn));
   }
 
@@ -105,7 +117,7 @@ export abstract class AbstractLogic<TReturn, TValue = TReturn> {
    * Merges in the logic from another logic instance, subject to the predicates of both the other
    * instance and this instance.
    */
-  mergeIn(other: AbstractLogic<TReturn, TValue>) {
+  mergeIn(other: AbstractLogic<TValue, TReturn, TResult>) {
     const fns = this.predicates
       ? other.fns.map((fn) => wrapWithPredicates(this.predicates, fn))
       : other.fns;
@@ -114,12 +126,15 @@ export abstract class AbstractLogic<TReturn, TValue = TReturn> {
 }
 
 /** Logic that combines its individual logic function results with logical OR. */
-export class BooleanOrLogic extends AbstractLogic<boolean> {
+export class BooleanOrLogic<
+  TValue,
+  TPathKind extends PathKind = PathKind.Root,
+> extends AbstractLogic<TValue, boolean, boolean, TPathKind> {
   override get defaultValue() {
     return false;
   }
 
-  override compute(arg: FieldContext<any>): boolean {
+  override compute(arg: FieldContext<TValue, TPathKind>): boolean {
     return this.fns.some((f) => {
       const result = f(arg);
       return result && result !== IGNORED;
@@ -131,18 +146,30 @@ export class BooleanOrLogic extends AbstractLogic<boolean> {
  * Logic that combines its individual logic function results by aggregating them in an array.
  * Depending on its `ignore` function it may ignore certain values, omitting them from the array.
  */
-export class ArrayMergeIgnoreLogic<TElement, TIgnore = never> extends AbstractLogic<
+export class ArrayMergeIgnoreLogic<
+  TValue,
+  TElement,
+  TIgnore = never,
+  TPathKind extends PathKind = PathKind.Root,
+> extends AbstractLogic<
+  TValue,
+  OneOrMany<TElement> | TIgnore | undefined | null | void,
   readonly TElement[],
-  TElement | readonly (TElement | TIgnore)[] | TIgnore | undefined | void
+  TPathKind
 > {
   /** Creates an instance of this class that ignores `null` values. */
-  static ignoreNull<TElement>(predicates: ReadonlyArray<BoundPredicate>) {
-    return new ArrayMergeIgnoreLogic<TElement, null>(predicates, (e: unknown) => e === null);
+  static ignoreNull<TValue, TElement, TPathKind extends PathKind = PathKind.Root>(
+    predicates: ReadonlyArray<BoundPredicate>,
+  ) {
+    return new ArrayMergeIgnoreLogic<TValue, TElement, null, TPathKind>(
+      predicates,
+      (e: unknown) => e === null,
+    );
   }
 
   constructor(
     predicates: ReadonlyArray<BoundPredicate>,
-    private ignore: undefined | ((e: TElement | undefined | TIgnore) => e is TIgnore),
+    private ignore?: (e: TElement | TIgnore | null | undefined) => e is TIgnore,
   ) {
     super(predicates);
   }
@@ -151,7 +178,7 @@ export class ArrayMergeIgnoreLogic<TElement, TIgnore = never> extends AbstractLo
     return [];
   }
 
-  override compute(arg: FieldContext<any>): readonly TElement[] {
+  override compute(arg: FieldContext<TValue, TPathKind>): readonly TElement[] {
     return this.fns.reduce((prev, f) => {
       const value = f(arg);
 
@@ -160,7 +187,7 @@ export class ArrayMergeIgnoreLogic<TElement, TIgnore = never> extends AbstractLo
       } else if (isArray(value)) {
         return [...prev, ...(this.ignore ? value.filter((e) => !this.ignore!(e)) : value)];
       } else {
-        if (this.ignore && this.ignore(value as TElement | TIgnore | undefined)) {
+        if (this.ignore && this.ignore(value)) {
           return prev;
         }
         return [...prev, value];
@@ -170,14 +197,23 @@ export class ArrayMergeIgnoreLogic<TElement, TIgnore = never> extends AbstractLo
 }
 
 /** Logic that combines its individual logic function results by aggregating them in an array. */
-export class ArrayMergeLogic<TElement> extends ArrayMergeIgnoreLogic<TElement, never> {
+export class ArrayMergeLogic<
+  TValue,
+  TElement,
+  TPathKind extends PathKind = PathKind.Root,
+> extends ArrayMergeIgnoreLogic<TValue, TElement, never, TPathKind> {
   constructor(predicates: ReadonlyArray<BoundPredicate>) {
     super(predicates, undefined);
   }
 }
 
 /** Logic that combines an AggregateProperty according to the property's own reduce function. */
-export class AggregatePropertyMergeLogic<TAcc, TItem> extends AbstractLogic<TAcc, TItem> {
+export class AggregatePropertyMergeLogic<
+  TValue,
+  TAcc,
+  TItem,
+  TPathKind extends PathKind = PathKind.Root,
+> extends AbstractLogic<TValue, TItem, TAcc, TPathKind> {
   override get defaultValue() {
     return this.key.getInitial();
   }
@@ -189,7 +225,7 @@ export class AggregatePropertyMergeLogic<TAcc, TItem> extends AbstractLogic<TAcc
     super(predicates);
   }
 
-  override compute(ctx: FieldContext<any>): TAcc {
+  override compute(ctx: FieldContext<TValue, TPathKind>): TAcc {
     if (this.fns.length === 0) {
       return this.key.getInitial();
     }
@@ -212,16 +248,16 @@ export class AggregatePropertyMergeLogic<TAcc, TItem> extends AbstractLogic<TAcc
  * @param logicFn The logic function to wrap
  * @returns A wrapped version of the logic function that may return `IGNORED`.
  */
-function wrapWithPredicates<TValue, TReturn>(
+function wrapWithPredicates<TValue, TReturn, TPathKind extends PathKind = PathKind.Root>(
   predicates: ReadonlyArray<BoundPredicate>,
-  logicFn: LogicFn<TValue, TReturn>,
-): LogicFn<TValue, TReturn | typeof IGNORED> {
+  logicFn: LogicFn<TValue, TReturn, TPathKind>,
+): LogicFn<TValue, TReturn | typeof IGNORED, TPathKind> {
   if (predicates.length === 0) {
     return logicFn;
   }
-  return (arg: FieldContext<any>): TReturn | typeof IGNORED => {
+  return (arg) => {
     for (const predicate of predicates) {
-      let predicateField = arg.stateOf(predicate.path) as FieldNode;
+      let predicateField = arg.stateOf(predicate.path) as FieldNode<unknown>;
       // Check the depth of the current field vs the depth this predicate is supposed to be
       // evaluated at. If necessary, walk up the field tree to grab the correct context field.
       // We can check the pathKeys as an untracked read since we know the structure of our fields
@@ -245,28 +281,28 @@ function wrapWithPredicates<TValue, TReturn>(
  * (disabled, hidden, errors, etc.)
  */
 
-export class LogicContainer {
+export class LogicContainer<TValue, TPathKind extends PathKind = PathKind.Root> {
   /** Logic that determines if the field is hidden. */
-  readonly hidden: BooleanOrLogic;
+  readonly hidden: BooleanOrLogic<TValue, TPathKind>;
   /** Logic that determines reasons for the field being disabled. */
-  readonly disabledReasons: ArrayMergeLogic<DisabledReason>;
+  readonly disabledReasons: ArrayMergeLogic<TValue, DisabledReason, TPathKind>;
   /** Logic that determines if the field is read-only. */
-  readonly readonly: BooleanOrLogic;
+  readonly readonly: BooleanOrLogic<TValue, TPathKind>;
   /** Logic that produces synchronous validation errors for the field. */
-  readonly syncErrors: ArrayMergeIgnoreLogic<ValidationError, null>;
+  readonly syncErrors: ArrayMergeIgnoreLogic<TValue, ValidationError, null, TPathKind>;
   /** Logic that produces synchronous validation errors for the field's subtree. */
-  readonly syncTreeErrors: ArrayMergeIgnoreLogic<ValidationError, null>;
+  readonly syncTreeErrors: ArrayMergeIgnoreLogic<TValue, ValidationError, null, TPathKind>;
   /** Logic that produces asynchronous validation results (errors or 'pending'). */
-  readonly asyncErrors: ArrayMergeIgnoreLogic<ValidationError | 'pending', null>;
+  readonly asyncErrors: ArrayMergeIgnoreLogic<TValue, ValidationError | 'pending', null, TPathKind>;
   /** A map of aggregate properties to the `AbstractLogic` instances that compute their values. */
   private readonly aggregateProperties = new Map<
     AggregateProperty<unknown, unknown>,
-    AbstractLogic<unknown>
+    AbstractLogic<TValue, unknown, unknown, TPathKind>
   >();
   /** A map of property keys to the factory functions that create their values. */
   private readonly propertyFactories = new Map<
     Property<unknown>,
-    (ctx: FieldContext<unknown>) => unknown
+    (ctx: FieldContext<TValue, TPathKind>) => unknown
   >();
 
   /**
@@ -278,9 +314,9 @@ export class LogicContainer {
     this.hidden = new BooleanOrLogic(predicates);
     this.disabledReasons = new ArrayMergeLogic(predicates);
     this.readonly = new BooleanOrLogic(predicates);
-    this.syncErrors = ArrayMergeIgnoreLogic.ignoreNull<ValidationError>(predicates);
-    this.syncTreeErrors = ArrayMergeIgnoreLogic.ignoreNull<ValidationError>(predicates);
-    this.asyncErrors = ArrayMergeIgnoreLogic.ignoreNull<ValidationError | 'pending'>(predicates);
+    this.syncErrors = ArrayMergeIgnoreLogic.ignoreNull(predicates);
+    this.syncTreeErrors = ArrayMergeIgnoreLogic.ignoreNull(predicates);
+    this.asyncErrors = ArrayMergeIgnoreLogic.ignoreNull(predicates);
   }
 
   /** Checks whether there is logic for the given aggregate property. */
@@ -309,16 +345,14 @@ export class LogicContainer {
    * @param prop The `AggregateProperty` for which to get the logic.
    * @returns The `AbstractLogic` associated with the key.
    */
-  getAggregateProperty<T>(prop: AggregateProperty<unknown, T>): AbstractLogic<T> {
-    if (!this.aggregateProperties.has(prop as AggregateProperty<unknown, unknown>)) {
-      this.aggregateProperties.set(
-        prop as AggregateProperty<unknown, unknown>,
-        new AggregatePropertyMergeLogic(this.predicates, prop),
-      );
+  getAggregateProperty<TAcc, TItem>(
+    prop: AggregateProperty<TAcc, TItem>,
+  ): AbstractLogic<TValue, TItem, TAcc, TPathKind> {
+    const key = prop as AggregateProperty<unknown, unknown>;
+    if (!this.aggregateProperties.has(key)) {
+      this.aggregateProperties.set(key, new AggregatePropertyMergeLogic(this.predicates, prop));
     }
-    return this.aggregateProperties.get(
-      prop as AggregateProperty<unknown, unknown>,
-    )! as AbstractLogic<T>;
+    return this.aggregateProperties.get(key) as AbstractLogic<TValue, TItem, TAcc, TPathKind>;
   }
 
   /**
@@ -327,7 +361,10 @@ export class LogicContainer {
    * @param factory The factory function.
    * @throws If a factory is already defined for the given key.
    */
-  addPropertyFactory(prop: Property<unknown>, factory: (ctx: FieldContext<unknown>) => unknown) {
+  addPropertyFactory<TProperty>(
+    prop: Property<TProperty>,
+    factory: (ctx: FieldContext<TValue, TPathKind>) => TProperty,
+  ) {
     if (this.propertyFactories.has(prop)) {
       // TODO: name of the property?
       throw new Error(`Can't define value twice for the same Property`);
@@ -339,7 +376,7 @@ export class LogicContainer {
    * Merges logic from another `Logic` instance into this one.
    * @param other The `Logic` instance to merge from.
    */
-  mergeIn(other: LogicContainer) {
+  mergeIn(other: LogicContainer<TValue, TPathKind>) {
     this.hidden.mergeIn(other.hidden);
     this.disabledReasons.mergeIn(other.disabledReasons);
     this.readonly.mergeIn(other.readonly);

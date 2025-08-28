@@ -41,7 +41,7 @@ export function disabled<TValue, TPathKind extends PathKind = PathKind.Root>(
     if (typeof logic === 'string') {
       result = logic;
     } else if (logic) {
-      result = logic(ctx as FieldContext<TValue, TPathKind>);
+      result = logic(ctx);
     }
     if (typeof result === 'string') {
       return {field: ctx.field, message: result};
@@ -111,9 +111,7 @@ export function validate<TValue, TPathKind extends PathKind = PathKind.Root>(
   assertPathIsCurrent(path);
 
   const pathNode = FieldPathNode.unwrapFieldPath(path);
-  pathNode.logic.addSyncErrorRule((ctx) =>
-    addDefaultField(logic(ctx as FieldContext<TValue, TPathKind>), ctx.field),
-  );
+  pathNode.logic.addSyncErrorRule((ctx) => addDefaultField(logic(ctx), ctx.field));
 }
 
 /**
@@ -132,9 +130,7 @@ export function validateTree<TValue, TPathKind extends PathKind = PathKind.Root>
   assertPathIsCurrent(path);
 
   const pathNode = FieldPathNode.unwrapFieldPath(path);
-  pathNode.logic.addSyncTreeErrorRule((ctx) =>
-    addDefaultField(logic(ctx as FieldContext<TValue, TPathKind>), ctx.field),
-  );
+  pathNode.logic.addSyncTreeErrorRule((ctx) => addDefaultField(logic(ctx), ctx.field));
 }
 
 /**
@@ -204,6 +200,6 @@ export function property<TValue, TData, TPathKind extends PathKind = PathKind.Ro
   key ??= createProperty();
 
   const pathNode = FieldPathNode.unwrapFieldPath(path);
-  pathNode.logic.addPropertyFactory(key, factory as (ctx: FieldContext<unknown>) => unknown);
+  pathNode.logic.addPropertyFactory(key, factory);
   return key;
 }

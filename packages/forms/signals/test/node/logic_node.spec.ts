@@ -7,11 +7,11 @@
  */
 
 import {signal} from '@angular/core';
-import {FieldContext, FieldState, customError} from '../../public_api';
+import {FieldContext, FieldState, customError, PathKind} from '../../public_api';
 import {DYNAMIC} from '../../src/schema/logic';
 import {LogicNodeBuilder} from '../../src/schema/logic_node';
 
-const fakeFieldContext: FieldContext<unknown> = {
+const fakeFieldContext: FieldContext<unknown, PathKind.Child> = {
   fieldOf: () => undefined!,
   stateOf: <P>() =>
     ({
@@ -22,6 +22,7 @@ const fakeFieldContext: FieldContext<unknown> = {
   field: undefined!,
   state: undefined!,
   value: undefined!,
+  key: undefined!,
 };
 
 describe('LogicNodeBuilder', () => {

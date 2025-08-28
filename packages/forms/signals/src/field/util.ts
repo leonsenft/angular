@@ -15,9 +15,9 @@ import type {FieldNodeOptions} from './structure';
  * Optionally, the reduction is short circuited based on the provided `shortCircuit` function.
  */
 export function reduceChildren<T>(
-  node: FieldNode,
+  node: FieldNode<unknown>,
   initialValue: T,
-  fn: (child: FieldNode, value: T) => T,
+  fn: (child: FieldNode<unknown>, value: T) => T,
   shortCircuit?: (value: T) => boolean,
 ): T {
   const childrenMap = node.structure.childrenMap();
@@ -51,7 +51,7 @@ export function cast<T>(value: unknown): asserts value is T {}
  * A helper method allowing to get injector regardless of the options type.
  * @param options
  */
-export function getInjectorFromOptions(options: FieldNodeOptions) {
+export function getInjectorFromOptions(options: FieldNodeOptions<unknown>) {
   if (options.kind === 'root') {
     return options.fieldManager.injector;
   }

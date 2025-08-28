@@ -15,6 +15,7 @@ import {
   WritableSignal,
 } from '@angular/core';
 
+import {PathKind} from '../api/types';
 import {DYNAMIC} from '../schema/logic';
 import {LogicNode} from '../schema/logic_node';
 import type {FieldPathNode} from '../schema/path_node';
@@ -33,12 +34,14 @@ import type {FieldAdapter} from './field_adapter';
 export type TrackingKey = PropertyKey & {__brand: 'FieldIdentity'};
 
 /** Structural component of a `FieldNode` which tracks its path, parent, and children. */
-export abstract class FieldNodeStructure {
+export abstract class FieldNodeStructure<TValue> {
   /** Computed map of child fields, based on the current value of this field. */
-  abstract readonly childrenMap: Signal<Map<TrackingKey, FieldNode> | undefined>;
+  abstract readonly childrenMap: Signal<
+    Map<TrackingKey, FieldNode<unknown, PathKind.Child>> | undefined
+  >;
 
   /** The field's value. */
-  abstract readonly value: WritableSignal<unknown>;
+  abstract readonly value: WritableSignal<TValue>;
 
   /**
    * The key of this field in its parent field.
@@ -50,13 +53,13 @@ export abstract class FieldNodeStructure {
   abstract readonly fieldManager: FormFieldManager;
 
   /** The root field that this field descends from. */
-  abstract readonly root: FieldNode;
+  abstract readonly root: FieldNode<unknown>;
 
   /** The list of property keys to follow to get from the `root` to this field. */
   abstract readonly pathKeys: Signal<readonly PropertyKey[]>;
 
   /** The parent field of this field. */
-  abstract readonly parent: FieldNode | undefined;
+  abstract readonly parent: FieldNode<unknown> | undefined;
 
   /** Added to array elements for tracking purposes. */
   // TODO: given that we don't ever let a field move between parents, is it safe to just extract
@@ -77,16 +80,16 @@ export abstract class FieldNodeStructure {
 
   constructor(
     /** The logic to apply to this field. */
-    readonly logic: LogicNode,
+    readonly logic: LogicNode<TValue>,
   ) {}
 
   /** Gets the child fields of this field. */
-  children(): Iterable<FieldNode> {
+  children(): Iterable<FieldNode<unknown, PathKind.Child>> {
     return this.childrenMap()?.values() ?? [];
   }
 
   /** Retrieve a child `FieldNode` of this node by property key. */
-  getChild(key: PropertyKey): FieldNode | undefined {
+  getChild(key: PropertyKey): FieldNode<unknown, PathKind.Child> | undefined {
     const map = this.childrenMap();
     const value = this.value();
     if (!map || !isObject(value)) {
@@ -112,13 +115,13 @@ export abstract class FieldNodeStructure {
 }
 
 /** The structural component of a `FieldNode` that is the root of its field tree. */
-export class RootFieldNodeStructure extends FieldNodeStructure {
+export class RootFieldNodeStructure<TValue> extends FieldNodeStructure<TValue> {
   override get parent(): undefined {
     return undefined;
   }
 
-  override get root(): FieldNode {
-    return this.node;
+  override get root(): FieldNode<unknown> {
+    return this.node as FieldNode<unknown>;
   }
 
   override get pathKeys(): Signal<readonly PropertyKey[]> {
@@ -129,7 +132,9 @@ export class RootFieldNodeStructure extends FieldNodeStructure {
     return ROOT_KEY_IN_PARENT;
   }
 
-  override readonly childrenMap: Signal<Map<TrackingKey, FieldNode> | undefined>;
+  override readonly childrenMap: Signal<
+    Map<TrackingKey, FieldNode<unknown, PathKind.Child>> | undefined
+  >;
 
   /**
    * Creates the structure for the root node of a field tree.
@@ -144,17 +149,19 @@ export class RootFieldNodeStructure extends FieldNodeStructure {
    */
   constructor(
     /** The full field node that corresponds to this structure. */
-    private readonly node: FieldNode,
-    pathNode: FieldPathNode,
-    logic: LogicNode,
+    private readonly node: FieldNode<TValue>,
+    pathNode: FieldPathNode<TValue>,
+    logic: LogicNode<TValue>,
     override readonly fieldManager: FormFieldManager,
-    override readonly value: WritableSignal<unknown>,
+    override readonly value: WritableSignal<TValue>,
     adapter: FieldAdapter,
-    createChildNode: (options: ChildFieldNodeOptions) => FieldNode,
+    createChildNode: (
+      options: ChildFieldNodeOptions<unknown>,
+    ) => FieldNode<unknown, PathKind.Child>,
   ) {
     super(logic);
     this.childrenMap = makeChildrenMapSignal(
-      node as ParentFieldNode,
+      node,
       value,
       this.identitySymbol,
       pathNode,
@@ -166,13 +173,15 @@ export class RootFieldNodeStructure extends FieldNodeStructure {
 }
 
 /** The structural component of a child `FieldNode` within a field tree. */
-export class ChildFieldNodeStructure extends FieldNodeStructure {
-  override readonly root: FieldNode;
+export class ChildFieldNodeStructure<TValue> extends FieldNodeStructure<TValue> {
+  override readonly root: FieldNode<unknown>;
   override readonly pathKeys: Signal<readonly PropertyKey[]>;
   override readonly keyInParent: Signal<string>;
-  override readonly value: WritableSignal<unknown>;
+  override readonly value: WritableSignal<TValue>;
 
-  override readonly childrenMap: Signal<Map<TrackingKey, FieldNode> | undefined>;
+  override readonly childrenMap: Signal<
+    Map<TrackingKey, FieldNode<unknown, PathKind.Child>> | undefined
+  >;
 
   override get fieldManager(): FormFieldManager {
     return this.root.structure.fieldManager;
@@ -191,14 +200,16 @@ export class ChildFieldNodeStructure extends FieldNodeStructure {
    * @param createChildNode A factory function to create child nodes for this field.
    */
   constructor(
-    node: FieldNode,
-    pathNode: FieldPathNode,
-    logic: LogicNode,
+    node: FieldNode<TValue>,
+    pathNode: FieldPathNode<TValue>,
+    logic: LogicNode<TValue>,
     override readonly parent: ParentFieldNode,
     identityInParent: TrackingKey | undefined,
     initialKeyInParent: string,
     adapter: FieldAdapter,
-    createChildNode: (options: ChildFieldNodeOptions) => FieldNode,
+    createChildNode: (
+      options: ChildFieldNodeOptions<unknown>,
+    ) => FieldNode<unknown, PathKind.Child>,
   ) {
     super(logic);
 
@@ -263,9 +274,12 @@ export class ChildFieldNodeStructure extends FieldNodeStructure {
       });
     }
 
-    this.value = deepSignal(this.parent.structure.value, this.keyInParent);
+    this.value = deepSignal(
+      this.parent.structure.value,
+      this.keyInParent,
+    ) as WritableSignal<TValue>;
     this.childrenMap = makeChildrenMapSignal(
-      node as ParentFieldNode,
+      node,
       this.value,
       this.identitySymbol,
       pathNode,
@@ -274,7 +288,7 @@ export class ChildFieldNodeStructure extends FieldNodeStructure {
       createChildNode,
     );
 
-    this.fieldManager.structures.add(this);
+    this.fieldManager.structures.add(this as FieldNodeStructure<unknown>);
   }
 }
 
@@ -282,15 +296,15 @@ export class ChildFieldNodeStructure extends FieldNodeStructure {
 let globalId = 0;
 
 /** Options passed when constructing a root field node. */
-export interface RootFieldNodeOptions {
+export interface RootFieldNodeOptions<TValue> {
   /** Kind of node, used to differentiate root node options from child node options. */
   readonly kind: 'root';
   /** The path node corresponding to this field in the schema. */
-  readonly pathNode: FieldPathNode;
+  readonly pathNode: FieldPathNode<TValue>;
   /** The logic to apply to this field. */
-  readonly logic: LogicNode;
+  readonly logic: LogicNode<TValue>;
   /** The value signal for this field. */
-  readonly value: WritableSignal<unknown>;
+  readonly value: WritableSignal<TValue>;
   /** The field manager for this field. */
   readonly fieldManager: FormFieldManager;
   /** This allows for more granular field and state management, and is currently used for compat. */
@@ -298,15 +312,15 @@ export interface RootFieldNodeOptions {
 }
 
 /** Options passed when constructing a child field node. */
-export interface ChildFieldNodeOptions {
+export interface ChildFieldNodeOptions<TValue> {
   /** Kind of node, used to differentiate root node options from child node options. */
   readonly kind: 'child';
   /** The parent field node of this field. */
   readonly parent: ParentFieldNode;
   /** The path node corresponding to this field in the schema. */
-  readonly pathNode: FieldPathNode;
+  readonly pathNode: FieldPathNode<TValue>;
   /** The logic to apply to this field. */
-  readonly logic: LogicNode;
+  readonly logic: LogicNode<TValue>;
   /** The key of this field in its parent at the time of creation. */
   readonly initialKeyInParent: string;
   /** The identity used to track this field in its parent. */
@@ -316,7 +330,7 @@ export interface ChildFieldNodeOptions {
 }
 
 /** Options passed when constructing a field node. */
-export type FieldNodeOptions = RootFieldNodeOptions | ChildFieldNodeOptions;
+export type FieldNodeOptions<TValue> = RootFieldNodeOptions<TValue> | ChildFieldNodeOptions<TValue>;
 
 /** A signal representing an empty list of path keys, used for root fields. */
 const ROOT_PATH_KEYS = computed<readonly PropertyKey[]>(() => []);
@@ -341,21 +355,21 @@ const ROOT_KEY_IN_PARENT = computed(() => {
  * @param createChildNode A factory function to create child nodes for this field.
  * @returns
  */
-function makeChildrenMapSignal(
-  node: FieldNode,
-  valueSignal: WritableSignal<unknown>,
+function makeChildrenMapSignal<TValue>(
+  node: FieldNode<TValue>,
+  valueSignal: WritableSignal<TValue>,
   identitySymbol: symbol,
-  pathNode: FieldPathNode,
-  logic: LogicNode,
+  pathNode: FieldPathNode<TValue>,
+  logic: LogicNode<TValue>,
   adapter: FieldAdapter,
-  createChildNode: (options: ChildFieldNodeOptions) => FieldNode,
-): Signal<Map<TrackingKey, FieldNode> | undefined> {
+  createChildNode: (options: ChildFieldNodeOptions<unknown>) => FieldNode<unknown, PathKind.Child>,
+): Signal<Map<TrackingKey, FieldNode<unknown, PathKind.Child>> | undefined> {
   // We use a `linkedSignal` to preserve the instances of `FieldNode` for each child field even if
   // the value of this field changes its object identity. The computation creates or updates the map
   // of child `FieldNode`s for `node` based on its current value.
-  return linkedSignal<unknown, Map<TrackingKey, FieldNode> | undefined>({
+  return linkedSignal({
     source: valueSignal,
-    computation: (value, previous): Map<TrackingKey, FieldNode> | undefined => {
+    computation: (value, previous) => {
       // We may or may not have a previous map. If there isn't one, then `childrenMap` will be lazily
       // initialized to a new map instance if needed.
       let childrenMap = previous?.value;
@@ -420,8 +434,8 @@ function makeChildrenMapSignal(
         }
 
         // Determine the logic for the field that we're defining.
-        let childPath: FieldPathNode | undefined;
-        let childLogic: LogicNode;
+        let childPath: FieldPathNode<unknown> | undefined;
+        let childLogic: LogicNode<unknown>;
         if (isValueArray) {
           // Fields for array elements have their logic defined by the `element` mechanism.
           // TODO: other dynamic data
@@ -433,7 +447,7 @@ function makeChildrenMapSignal(
           childLogic = logic.getChild(key);
         }
 
-        childrenMap ??= new Map<TrackingKey, FieldNode>();
+        childrenMap ??= new Map<TrackingKey, FieldNode<unknown, PathKind.Child>>();
         childrenMap.set(
           identity,
           createChildNode({
@@ -455,6 +469,6 @@ function makeChildrenMapSignal(
 }
 
 /** Gets a human readable name for a field node for use in error messages. */
-function getDebugName(node: FieldNode) {
+function getDebugName(node: FieldNode<unknown>) {
   return `<root>.${node.structure.pathKeys().join('.')}`;
 }

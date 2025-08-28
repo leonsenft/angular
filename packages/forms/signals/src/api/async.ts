@@ -140,7 +140,7 @@ export function validateAsync<TValue, TParams, TResult, TPathKind extends PathKi
 
   const RESOURCE = property(path, (ctx) => {
     const params = computed(() => {
-      const node = ctx.stateOf(path) as FieldNode;
+      const node = ctx.stateOf(path) as FieldNode<TValue, TPathKind>;
       const validationState = node.validationState;
       if (validationState.shouldSkipValidation() || !validationState.syncValid()) {
         return undefined;
@@ -163,7 +163,7 @@ export function validateAsync<TValue, TParams, TResult, TPathKind extends PathKi
         if (!res.hasValue()) {
           return undefined;
         }
-        const errors = opts.errors(res.value()!, ctx as FieldContext<TValue, TPathKind>);
+        const errors = opts.errors(res.value()!, ctx);
         return addDefaultField(errors, ctx.field);
       case 'error':
         // TODO: Design error handling for async validation. For now, just throw the error.

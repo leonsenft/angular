@@ -7,7 +7,7 @@
  */
 
 import {computed, Signal} from '@angular/core';
-import type {Field, Mutable, TreeValidationResult, ValidationResult} from '../api/types';
+import type {Field, Mutable, PathKind, TreeValidationResult, ValidationResult} from '../api/types';
 import type {ValidationError, WithOptionalField} from '../api/validation_errors';
 import {isArray} from '../util/type_guards';
 import type {FieldNode} from './node';
@@ -144,8 +144,10 @@ export interface ValidationState {
  * 4. Server errors are not produced by the schema logic, but instead get imperatively added when a
  *    form submit fails with errors.
  */
-export class FieldValidationState implements ValidationState {
-  constructor(readonly node: FieldNode) {}
+export class FieldValidationState<TValue, TPathKind extends PathKind = PathKind.Root>
+  implements ValidationState
+{
+  constructor(readonly node: FieldNode<TValue, TPathKind>) {}
 
   /**
    * The full set of synchronous tree errors visible to this field. This includes ones that are
@@ -192,7 +194,7 @@ export class FieldValidationState implements ValidationState {
     }
 
     return reduceChildren(
-      this.node,
+      this.node as FieldNode<unknown>,
       this.syncErrors().length === 0,
       (child, value) => value && child.validationState.syncValid(),
       shortCircuitFalse,
@@ -249,7 +251,7 @@ export class FieldValidationState implements ValidationState {
   ]);
 
   readonly errorSummary = computed(() =>
-    reduceChildren(this.node, this.errors(), (child, result) => [
+    reduceChildren(this.node as FieldNode<unknown>, this.errors(), (child, result) => [
       ...result,
       ...child.errorSummary(),
     ]),
@@ -260,7 +262,7 @@ export class FieldValidationState implements ValidationState {
    */
   readonly pending = computed(() =>
     reduceChildren(
-      this.node,
+      this.node as FieldNode<unknown>,
       this.asyncErrors().includes('pending'),
       (child, value) => value || child.validationState.asyncErrors().includes('pending'),
     ),
@@ -291,7 +293,7 @@ export class FieldValidationState implements ValidationState {
     let ownStatus = calculateValidationSelfStatus(this);
 
     return reduceChildren<'valid' | 'invalid' | 'unknown'>(
-      this.node,
+      this.node as FieldNode<unknown>,
       ownStatus,
       (child, value) => {
         if (value === 'invalid' || child.validationState.status() === 'invalid') {

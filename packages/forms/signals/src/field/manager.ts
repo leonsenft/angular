@@ -30,7 +30,7 @@ export class FormFieldManager {
    * New child structures are automatically added when they are created.
    * Structures are destroyed and removed when they are no longer reachable from the root.
    */
-  readonly structures = new Set<FieldNodeStructure>();
+  readonly structures = new Set<FieldNodeStructure<unknown>>();
 
   /**
    * Creates an effect that runs when the form's structure changes and checks for structures that
@@ -45,10 +45,10 @@ export class FormFieldManager {
    *
    * @param root The root field structure.
    */
-  createFieldManagementEffect(root: FieldNodeStructure): void {
+  createFieldManagementEffect(root: FieldNodeStructure<unknown>): void {
     effect(
       () => {
-        const liveStructures = new Set<FieldNodeStructure>();
+        const liveStructures = new Set<FieldNodeStructure<unknown>>();
         this.markStructuresLive(root, liveStructures);
 
         // Destroy all nodes that are no longer live.
@@ -70,8 +70,8 @@ export class FormFieldManager {
    * @param liveStructures The set of reachable structures to populate
    */
   private markStructuresLive(
-    structure: FieldNodeStructure,
-    liveStructures: Set<FieldNodeStructure>,
+    structure: FieldNodeStructure<unknown>,
+    liveStructures: Set<FieldNodeStructure<unknown>>,
   ): void {
     liveStructures.add(structure);
     for (const child of structure.children()) {

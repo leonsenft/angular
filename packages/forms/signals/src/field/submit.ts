@@ -23,7 +23,7 @@ export class FieldSubmitState {
   /** Server errors that are associated with this field. */
   readonly serverErrors: WritableSignal<readonly ValidationError[]>;
 
-  constructor(private readonly node: FieldNode) {
+  constructor(private readonly node: FieldNode<unknown>) {
     this.serverErrors = linkedSignal({
       source: this.node.structure.value,
       computation: () => [] as readonly ValidationError[],

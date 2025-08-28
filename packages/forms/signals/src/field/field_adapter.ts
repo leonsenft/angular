@@ -6,6 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
+import {PathKind} from '../api/types';
 import {FieldPathNode} from '../schema/path_node';
 
 import {FormFieldManager} from './manager';
@@ -25,27 +26,28 @@ export interface FieldAdapter {
    * @param node
    * @param options
    */
-  createStructure(node: FieldNode, options: FieldNodeOptions): FieldNodeStructure;
+  createStructure<TValue>(
+    node: FieldNode<TValue>,
+    options: FieldNodeOptions<TValue>,
+  ): FieldNodeStructure<TValue>;
 
   /**
    * Creates node validation state
    * @param param
-   * @param options
    */
-  createValidationState(param: FieldNode, options: FieldNodeOptions): ValidationState;
+  createValidationState(param: FieldNode<unknown>): ValidationState;
 
   /**
    * Creates node state.
    * @param param
-   * @param options
    */
-  createNodeState(param: FieldNode, options: FieldNodeOptions): FieldNodeState;
+  createNodeState(param: FieldNode<unknown>): FieldNodeState;
 
   /**
    * Creates a custom child node.
    * @param options
    */
-  newChild(options: ChildFieldNodeOptions): FieldNode;
+  newChild<TValue>(options: ChildFieldNodeOptions<TValue>): FieldNode<TValue, PathKind.Child>;
 
   /**
    * Creates a custom root node.
@@ -57,9 +59,9 @@ export interface FieldAdapter {
   newRoot<TValue>(
     fieldManager: FormFieldManager,
     model: WritableSignal<TValue>,
-    pathNode: FieldPathNode,
+    pathNode: FieldPathNode<TValue>,
     adapter: FieldAdapter,
-  ): FieldNode;
+  ): FieldNode<TValue>;
 }
 
 /**
@@ -76,9 +78,9 @@ export class BasicFieldAdapter implements FieldAdapter {
   newRoot<TValue>(
     fieldManager: FormFieldManager,
     value: WritableSignal<TValue>,
-    pathNode: FieldPathNode,
+    pathNode: FieldPathNode<TValue>,
     adapter: FieldAdapter,
-  ): FieldNode {
+  ): FieldNode<TValue> {
     return new FieldNode({
       kind: 'root',
       fieldManager,
@@ -93,7 +95,7 @@ export class BasicFieldAdapter implements FieldAdapter {
    * Creates a new child field node.
    * @param options
    */
-  newChild(options: ChildFieldNodeOptions): FieldNode {
+  newChild<TValue>(options: ChildFieldNodeOptions<TValue>): FieldNode<TValue> {
     return new FieldNode(options);
   }
 
@@ -101,7 +103,7 @@ export class BasicFieldAdapter implements FieldAdapter {
    * Creates a node state.
    * @param node
    */
-  createNodeState(node: FieldNode): FieldNodeState {
+  createNodeState(node: FieldNode<unknown>): FieldNodeState {
     return new FieldNodeState(node);
   }
 
@@ -109,7 +111,7 @@ export class BasicFieldAdapter implements FieldAdapter {
    * Creates a validation state.
    * @param node
    */
-  createValidationState(node: FieldNode): ValidationState {
+  createValidationState(node: FieldNode<unknown>): ValidationState {
     return new FieldValidationState(node);
   }
 
@@ -118,7 +120,10 @@ export class BasicFieldAdapter implements FieldAdapter {
    * @param node
    * @param options
    */
-  createStructure(node: FieldNode, options: FieldNodeOptions): FieldNodeStructure {
+  createStructure<TValue>(
+    node: FieldNode<TValue>,
+    options: FieldNodeOptions<TValue>,
+  ): FieldNodeStructure<TValue> {
     return node.createStructure(options);
   }
 }

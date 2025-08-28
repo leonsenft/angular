@@ -13,8 +13,8 @@ import type {FieldNode} from './node';
 /**
  * Proxy handler which implements `Field<T>` on top of `FieldNode`.
  */
-export const FIELD_PROXY_HANDLER: ProxyHandler<() => FieldNode> = {
-  get(getTgt: () => FieldNode, p: string | symbol) {
+export const FIELD_PROXY_HANDLER: ProxyHandler<() => FieldNode<unknown>> = {
+  get(getTgt: () => FieldNode<unknown>, p: string | symbol) {
     const tgt = getTgt();
 
     // First, check whether the requested property is a defined child node of this node.
